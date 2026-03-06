@@ -294,9 +294,71 @@ def upload_user_data(cellphone, cost_center, concept, last_row, invoice_pk=None)
             cost_center=cost_center,
             concept=concept,
         )
+        # --- Trigger Odoo Sync ---
+        sync_invoice_payment_to_odoo.delay(invoice_pk)
 
     _whatsapp.send_message(cellphone, "Proceso con la factura completado. ✅")
     logger.info("Datos de usuario subidos para %s.", cellphone)
+
+
+@shared_task
+def sync_invoice_payment_to_odoo(invoice_pk):
+    """
+    Busca la factura en Odoo por referencia y registra el pago.
+    Actualiza Google Sheets con el resultado.
+    """
+    from core.models import Invoice
+    from core.services.odoo_client import OdooClient
+    from core.services.google_sheets import write_data, get_sheets_service
+    
+    try:
+        invoice = Invoice.objects.get(pk=invoice_pk)
+        client = OdooClient()
+        
+        # 1. Buscar factura
+        odoo_invoice = client.get_invoice_by_ref(invoice.invoice_number)
+        
+        if not odoo_invoice:
+            status_doc = "❌ No encontrada"
+            status_pago = "❌"
+        else:
+            state = odoo_invoice['state']
+            if state == 'draft':
+                status_doc = "⏳ Borrador (Odoo)"
+                status_pago = "⏳ Pendiente"
+            elif state == 'posted':
+                status_doc = "✅ Causada"
+                # Intentar registro de pago si no está pagada
+                if odoo_invoice['payment_state'] in ['not_paid', 'partial']:
+                    journal_name = invoice.employee.sheet_name.split(' ')[0] # Usar primer nombre como Diario
+                    result = client.register_payment(odoo_invoice['id'], journal_name, odoo_invoice['invoice_date'])
+                    if result['success']:
+                        status_pago = "✅ Pagada"
+                    else:
+                        status_pago = f"❌ Error: {result['error']}"
+                else:
+                    status_pago = "✅ Pagada anteriormente"
+            else:
+                status_doc = f"❓ Estado: {state}"
+                status_pago = "❓"
+
+        # 2. Actualizar Google Sheets
+        service = _sheets_service or get_sheets_service()
+        sheet_id = settings.SHEET_ID
+        sheet_name = invoice.employee.sheet_name
+        row_num = invoice.sheet_row
+        
+        is_special = sheet_name in ('MANTENIMIENTO 2025', 'TRAB SOCIALES 2025')
+        col_doc = "L" if is_special else "K"
+        col_pago = "M" if is_special else "L"
+        
+        write_data(service, sheet_id, sheet_name, f"{col_doc}{row_num}", [[status_doc]])
+        write_data(service, sheet_id, sheet_name, f"{col_pago}{row_num}", [[status_pago]])
+        
+        logger.info(f"Odoo sync completed for invoice {invoice.invoice_number}")
+        
+    except Exception as e:
+        logger.error(f"Error in sync_invoice_payment_to_odoo: {e}")
 
 
 # ---------------------------------------------------------------------------

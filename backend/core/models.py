@@ -153,5 +153,54 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
         verbose_name = "Usuario"
         verbose_name_plural = "Usuarios"
 
+class PettyReload(models.Model):
+    class Status(models.TextChoices):
+        DRAFT    = "draft",    "Solicitud"
+        APPROVED = "approved", "Aprobado"
+        EXECUTED = "executed", "Realizado"
+        CANCEL   = "cancel",   "Cancelado"
+
+    reference = models.CharField(
+        max_length=50, unique=True, editable=False, verbose_name="Referencia"
+    )
+    employee = models.ForeignKey(
+        "Employee",
+        on_delete=models.CASCADE,
+        related_name="reloads",
+        verbose_name="Empleado",
+    )
+    amount_requested = models.DecimalField(
+        max_digits=12, decimal_places=2, verbose_name="Monto solicitado"
+    )
+    state = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.DRAFT,
+        verbose_name="Estado",
+    )
+    date_request = models.DateTimeField(
+        default=timezone.now, verbose_name="Fecha de solicitud"
+    )
+    observations = models.TextField(blank=True, default="", verbose_name="Observaciones")
+
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
+    updated_at = models.DateTimeField(auto_now=True, verbose_name="Última actualización")
+
+    class Meta:
+        ordering = ["-date_request"]
+        verbose_name = "Recarga de Caja Menor"
+        verbose_name_plural = "Recargas de Caja Menor"
+
     def __str__(self):
-        return self.email
+        return f"{self.reference} — {self.employee.sheet_name} (${self.amount_requested})"
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            # Simple sequence generation logic for reference
+            last_reload = PettyReload.objects.all().order_by('id').last()
+            if not last_reload:
+                self.reference = "RECH-0001"
+            else:
+                last_id = int(last_reload.reference.split('-')[1])
+                self.reference = f"RECH-{str(last_id + 1).zfill(4)}"
+        super().save(*args, **kwargs)

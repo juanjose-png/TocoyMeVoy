@@ -2,7 +2,64 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 from django.utils.html import format_html
 
-from .models import CustomUser, Employee, Invoice, InvoiceSession
+from .models import CustomUser, Employee, Invoice, InvoiceSession, PettyReload
+from .services.pettyflow_service import PettyFlowService
+from django.contrib import messages
+
+# ... (Previous code remains the same)
+
+@admin.register(PettyReload)
+class PettyReloadAdmin(admin.ModelAdmin):
+    list_display = ["reference", "employee", "amount_requested", "state", "date_request"]
+    list_filter = ["state", "date_request", "employee"]
+    search_fields = ["reference", "employee__sheet_name", "observations"]
+    readonly_fields = ["reference", "date_request", "created_at", "updated_at"]
+    actions = ["approve_requests", "execute_reloads", "cancel_requests"]
+
+    def save_model(self, request, obj, form, change):
+        if not change:  # On creation
+            day_check = PettyFlowService.check_request_day()
+            if day_check['warning']:
+                messages.warning(request, day_check['message'])
+            
+            # Auto-notify if visitador
+            PettyFlowService.notify_discord_visitador(obj.employee.sheet_name, obj.amount_requested)
+            
+        super().save_model(request, obj, form, change)
+
+    @admin.action(description="Aprobar solicitudes seleccionadas")
+    def approve_requests(self, request, queryset):
+        for obj in queryset.filter(state="draft"):
+            allowed, message = PettyFlowService.validate_budget(obj.employee.sheet_name, obj.amount_requested)
+            if not allowed:
+                self.message_user(request, f"Error en {obj.reference}: {message}", messages.ERROR)
+                continue
+            
+            if message: # Warning message
+                self.message_user(request, f"Aviso en {obj.reference}: {message}", messages.WARNING)
+                
+            obj.state = "approved"
+            obj.save()
+        self.message_user(request, "Solicitudes aprobadas correctamente.")
+
+    @admin.action(description="Ejecutar reloads seleccionados")
+    def execute_reloads(self, request, queryset):
+        success_count = 0
+        for obj in queryset.filter(state="approved"):
+            if PettyFlowService.sync_to_google_sheets(obj):
+                obj.state = "executed"
+                obj.save()
+                success_count += 1
+            else:
+                self.message_user(request, f"Error sincronizando {obj.reference}", messages.ERROR)
+        
+        if success_count:
+            self.message_user(request, f"Se ejecutaron {success_count} reloads correctamente.")
+
+    @admin.action(description="Cancelar solicitudes seleccionadas")
+    def cancel_requests(self, request, queryset):
+        queryset.filter(state__in=["draft", "approved"]).update(state="cancel")
+        self.message_user(request, "Solicitudes canceladas.")
 
 
 @admin.register(CustomUser)

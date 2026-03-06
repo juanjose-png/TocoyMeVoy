@@ -26,7 +26,7 @@ FROM debian:trixie-slim
 ARG UID=1000
 ARG GID=1000
 RUN groupadd --system --gid ${GID} nonroot \
- && useradd --system --gid ${GID} --uid ${UID} --create-home nonroot
+    && useradd --system --gid ${GID} --uid ${UID} --create-home nonroot
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \

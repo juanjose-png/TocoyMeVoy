@@ -1,0 +1,29 @@
+[
+    {
+        "invoice_id": "FACT-001",
+        "reference": "FE-123456",
+        "odoo_status": "posted",
+        "payment_status": "not_paid",
+        "action": "Register Payment",
+        "journal": "ESTEFANIA",
+        "result": "Success - Payment Created"
+    },
+    {
+        "invoice_id": "FACT-002",
+        "reference": "FE-789012",
+        "odoo_status": "draft",
+        "payment_status": "pending",
+        "action": "Wait for Approval",
+        "journal": "MAURO",
+        "result": "Marked as 'Pendiente en Odoo'"
+    },
+    {
+        "invoice_id": "FACT-003",
+        "reference": "FE-999999",
+        "odoo_status": "not_found",
+        "payment_status": "n/a",
+        "action": "Log Error",
+        "journal": "n/a",
+        "result": "Error: Invoice not found in Odoo"
+    }
+]

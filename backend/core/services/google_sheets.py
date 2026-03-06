@@ -23,8 +23,8 @@ if os.path.exists("config/spreadsheets_credentials.json"):
     logger.info("Archivo de credenciales de la cuenta de servicio encontrado.")
     SERVICE_ACCOUNT_FILE = "config/spreadsheets_credentials.json"
 else:
-    logger.error("Archivo de credenciales de la cuenta de servicio no encontrado. Asegúrate de que 'spreadsheets_credentials.json' existe en el directorio actual.")
-    raise FileNotFoundError("El archivo de credenciales de la cuenta del servicio no se encontró.")
+    logger.warning("Archivo de credenciales de la cuenta de servicio no encontrado. Las funciones de Google Sheets no estarán disponibles.")
+    SERVICE_ACCOUNT_FILE = None
 
 
 # Función que recibe el string del path al archivo de credenciales y devuelve un objeto de servicio

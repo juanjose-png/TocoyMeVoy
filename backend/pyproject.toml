@@ -21,6 +21,7 @@ dependencies = [
     "requests",
     "whitenoise",
     "django-environ>=0.13.0",
+    "django-cors-headers",
 ]
 
 [tool.uv]

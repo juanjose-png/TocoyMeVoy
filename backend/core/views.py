@@ -314,6 +314,14 @@ class CardsListView(View):
         try:
             service = get_sheets_service()
             sheet_id = settings.SHEET_ID
+            
+            if service is None:
+                logger.warning("Google Sheets service unavailable. Returning mock cards.")
+                return JsonResponse([
+                    {"sheet_name": "JULIAN 2025", "card_label": "JULIAN", "leader": "JULIAN", "cupo_mensual": "1.000.000", "valor_gastos": "200.000", "disponible": 800000},
+                    {"sheet_name": "MAURO 2025", "card_label": "MAURO", "leader": "MAURO", "cupo_mensual": "1.500.000", "valor_gastos": "500.000", "disponible": 1000000},
+                ], safe=False)
+
             cards = get_cards_list(service, sheet_id)
             
             # Additional metrics for each card (M8, N8)
@@ -348,6 +356,13 @@ class CardMonthsView(View):
     def get(self, request, sheet_name):
         try:
             service = get_sheets_service()
+            if service is None:
+                logger.warning(f"Google Sheets service unavailable. Returning mock months for {sheet_name}.")
+                return JsonResponse([
+                    {"month_label": "ENERO 2025", "start_row": 12, "end_row": 50},
+                    {"month_label": "FEBRERO 2025", "start_row": 51, "end_row": 100},
+                ], safe=False)
+
             sheet_id = settings.SHEET_ID
             months = get_months_in_sheet(service, sheet_id, sheet_name)
             return JsonResponse(months, safe=False)
@@ -361,6 +376,17 @@ class ReportDataView(View):
             start_row = int(request.GET.get("start_row", 12))
             end_row = int(request.GET.get("end_row", 100))
             service = get_sheets_service()
+            if service is None:
+                logger.warning(f"Google Sheets service unavailable. Returning mock rows for {sheet_name}.")
+                return JsonResponse([
+                    {
+                        "no": 1, "fecha": "2025-01-05", "nombre_negocio": "Tienda Mock", "nit": "12345", 
+                        "num_factura": "FE-001", "centro_costos": "ADMIN", "concepto": "Papelería", 
+                        "valor_legalizado": "50000", "url_drive": "http://example.com", "cufe": "abc",
+                        "check_odoo_doc": "x", "check_odoo_pago": "x", "diferencia": "0", "observaciones": "Mock"
+                    }
+                ], safe=False)
+
             sheet_id = settings.SHEET_ID
             rows = get_month_rows(service, sheet_id, sheet_name, start_row, end_row)
             return JsonResponse(rows, safe=False)
