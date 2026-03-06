@@ -62,6 +62,12 @@ class Invoice(models.Model):
     sheet_row       = models.IntegerField(null=True, blank=True, verbose_name="Fila en Sheets")
     sheet_record_id = models.CharField(max_length=50, null=True, blank=True, verbose_name="ID fila en Sheets")
 
+    # Tracking Google Drive
+    drive_folder_id = models.CharField(
+        max_length=200, blank=True, default="",
+        verbose_name="ID carpeta Drive",
+    )
+
     status     = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, verbose_name="Estado")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última actualización")

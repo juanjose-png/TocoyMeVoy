@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.utils.html import format_html
 
 from .models import CustomUser, Employee, Invoice, InvoiceSession
 
@@ -28,7 +29,7 @@ class CustomUserAdmin(UserAdmin):
 class InvoiceAdmin(admin.ModelAdmin):
     list_display = [
         "id", "cellphone", "business_name", "invoice_number",
-        "value", "was_corrected", "status", "created_at",
+        "value", "was_corrected", "status", "created_at", "url_soporte",
     ]
     list_filter = ["status", "was_corrected", "is_pdf", "created_at"]
     search_fields = ["cellphone", "business_name", "nit", "invoice_number"]
@@ -38,8 +39,19 @@ class InvoiceAdmin(admin.ModelAdmin):
         "cellphone", "employee", "invoice_date", "business_name", "nit",
         "invoice_number", "original_value", "value", "was_corrected",
         "cost_center", "concept", "file_path", "is_pdf",
-        "sheet_row", "sheet_record_id", "status", "created_at", "updated_at",
+        "sheet_row", "sheet_record_id", "drive_folder_id",
+        "status", "created_at", "updated_at",
     ]
+
+    @admin.display(description="URL Soporte")
+    def url_soporte(self, obj):
+        if obj.drive_folder_id:
+            url = f"https://drive.google.com/drive/folders/{obj.drive_folder_id}"
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">📂 Ver soporte</a>',
+                url,
+            )
+        return "Sin soporte"
 
 
 @admin.register(Employee)

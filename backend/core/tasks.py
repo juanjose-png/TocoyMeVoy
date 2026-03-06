@@ -240,9 +240,10 @@ def confirm_and_upload(self, cellphone, invoice_pk):
 def upload_invoice_file(cellphone, invoice_number, is_pdf, file_path, row_id):
     """Sube el archivo de la factura (imagen o PDF) a Google Drive."""
     from core.services.google_drive import upload_invoice_in_folder
+    from core.models import Invoice
 
     if is_pdf:
-        upload_invoice_in_folder(
+        folder_id = upload_invoice_in_folder(
             _drive_service,
             MAIN_FOLDER_ID,
             cellphone,
@@ -254,7 +255,7 @@ def upload_invoice_file(cellphone, invoice_number, is_pdf, file_path, row_id):
     else:
         with open(file_path, "rb") as f:
             image_bytes = f.read()
-        upload_invoice_in_folder(
+        folder_id = upload_invoice_in_folder(
             _drive_service,
             MAIN_FOLDER_ID,
             cellphone,
@@ -263,6 +264,13 @@ def upload_invoice_file(cellphone, invoice_number, is_pdf, file_path, row_id):
             image_bytes=image_bytes,
             row_id=row_id,
         )
+
+    # Persistir el ID de carpeta Drive en el Invoice correspondiente
+    if folder_id:
+        Invoice.objects.filter(
+            cellphone=cellphone, sheet_record_id=str(row_id)
+        ).update(drive_folder_id=folder_id)
+        logger.info("drive_folder_id '%s' guardado para %s (row_id=%s).", folder_id, cellphone, row_id)
 
     # Limpiar archivo temporal de disco
     if file_path and os.path.exists(file_path):
