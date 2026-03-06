@@ -1,0 +1,1 @@
+Skill: Experto en personalización de Django. Debe implementar filtros por 'Tarjeta', 'Fechas' y 'Monto'. Incluir columna 'URL Soporte' con format_html para links a Drive. Configurar la tabla central con los colores verde/amarillo según el estado de legalización.

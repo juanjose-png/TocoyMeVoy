@@ -300,3 +300,70 @@ class HealthView(View):
         except Exception:
             return JsonResponse({"status": "error", "db": "unavailable"}, status=503)
         return JsonResponse({"status": "ok"})
+
+
+# ---------------------------------------------------------------------------
+# API Views for Administrative Portal
+# ---------------------------------------------------------------------------
+
+from core.services.google_sheets import get_sheets_service
+from .services.sheet_navigator import get_cards_list, get_months_in_sheet, get_month_rows
+
+class CardsListView(View):
+    def get(self, request):
+        try:
+            service = get_sheets_service()
+            sheet_id = settings.SHEET_ID
+            cards = get_cards_list(service, sheet_id)
+            
+            # Additional metrics for each card (M8, N8)
+            from core.services.google_sheets import read_data
+            for card in cards:
+                try:
+                    # Read M8 (Cupo) and N8 (Gastos)
+                    # We assume sheet_navigator correctly returns sheet_name
+                    metrics = read_data(service, sheet_id, card["sheet_name"], "M8:N8")
+                    if metrics and metrics[0]:
+                        card["cupo_mensual"] = metrics[0][0]
+                        card["valor_gastos"] = metrics[0][1] if len(metrics[0]) > 1 else "0"
+                        # Calculate available
+                        try:
+                            cupo = float(str(card["cupo_mensual"]).replace(",", ""))
+                            gastos = float(str(card["valor_gastos"]).replace(",", ""))
+                            card["disponible"] = cupo - gastos
+                        except:
+                            card["disponible"] = 0
+                except Exception as e:
+                    logger.error(f"Error reading metrics for card {card['sheet_name']}: {e}")
+                    card["cupo_mensual"] = 0
+                    card["valor_gastos"] = 0
+                    card["disponible"] = 0
+
+            return JsonResponse(cards, safe=False)
+        except Exception as e:
+            logger.error(f"Error in CardsListView: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
+
+class CardMonthsView(View):
+    def get(self, request, sheet_name):
+        try:
+            service = get_sheets_service()
+            sheet_id = settings.SHEET_ID
+            months = get_months_in_sheet(service, sheet_id, sheet_name)
+            return JsonResponse(months, safe=False)
+        except Exception as e:
+            logger.error(f"Error in CardMonthsView: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
+
+class ReportDataView(View):
+    def get(self, request, sheet_name):
+        try:
+            start_row = int(request.GET.get("start_row", 12))
+            end_row = int(request.GET.get("end_row", 100))
+            service = get_sheets_service()
+            sheet_id = settings.SHEET_ID
+            rows = get_month_rows(service, sheet_id, sheet_name, start_row, end_row)
+            return JsonResponse(rows, safe=False)
+        except Exception as e:
+            logger.error(f"Error in ReportDataView: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
