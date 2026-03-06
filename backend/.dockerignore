@@ -1,0 +1,15 @@
+.venv
+__pycache__
+*.pyc
+*.pyo
+.git
+.env
+.env.example
+.claude
+.vscode
+.ruff_cache
+logs.txt
+logs_tokens.txt
+.logs/
+archivos_pdf/
+*.md

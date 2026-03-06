@@ -1,0 +1,30 @@
+[project]
+name = "solenium-caja-menor"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    # Django + infrastructure
+    "django>=5.2",
+    "gunicorn>=23.0",
+    "psycopg2-binary>=2.9",
+    "celery[redis]>=5.4",
+    # Google services (unchanged modules)
+    "google-genai",
+    "pdf2image",
+    "google-api-python-client",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
+    "Pillow",
+    "pydantic",
+    "pytz",
+    # Utilities
+    "requests",
+    "whitenoise",
+    "django-environ>=0.13.0",
+]
+
+[tool.uv]
+package = false
+
+[dependency-groups]
+dev = []

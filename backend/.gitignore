@@ -1,0 +1,20 @@
+.env
+.venv/
+*.zip
+__pycache__/
+*.pyc
+*.pyo
+*.ipynb
+/00_Soportes tarjeta caja menor /
+/deprecated/
+/archivos_extraidos/
+.vscode/
+/config/
+/archivos_pdf/
+/archivos_img/
+logs_tokens.txt
+logs.txt
+.logs/
+staticfiles/
+/config_old/
+/config_new/

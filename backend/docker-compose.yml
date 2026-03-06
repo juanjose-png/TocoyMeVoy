@@ -1,0 +1,95 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: on-failure
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_HOST_PORT:-5437}:${DB_PORT:-5432}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: on-failure
+    ports:
+      - "${REDIS_HOST_PORT:-6379}:6379"
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    restart: on-failure
+    command: >
+      sh -c "python manage.py collectstatic --noinput &&
+             gunicorn solenium_project.wsgi:application --bind 0.0.0.0:3000 --workers 2"
+    ports:
+      - "3000:3000"
+    volumes:
+      - static_files:/app/staticfiles
+      - archivos_pdf:/app/archivos_pdf
+      - archivos_img:/app/archivos_img
+      - ./.logs:/app/.logs
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/health/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  celery-worker:
+    build: .
+    restart: on-failure
+    command: celery -A solenium_project worker -l info -c 4
+    volumes:
+      - archivos_pdf:/app/archivos_pdf
+      - archivos_img:/app/archivos_img
+      - ./.logs:/app/.logs
+    env_file:
+      - .env
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build: .
+    restart: on-failure
+    command: celery -A solenium_project beat -l info --schedule=/tmp/celerybeat-schedule
+    volumes:
+      - ./.logs:/app/.logs
+    env_file:
+      - .env
+    depends_on:
+      web:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  static_files:
+  archivos_pdf:
+  archivos_img:
