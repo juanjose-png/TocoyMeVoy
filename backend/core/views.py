@@ -306,46 +306,38 @@ class HealthView(View):
 # API Views for Administrative Portal
 # ---------------------------------------------------------------------------
 
-from core.services.google_sheets import get_sheets_service
-from .services.sheet_navigator import get_cards_list, get_months_in_sheet, get_month_rows
+from core.models import Employee, Invoice
+from django.db.models import Sum
+import datetime
 
 class CardsListView(View):
     def get(self, request):
         try:
-            service = get_sheets_service()
-            sheet_id = settings.SHEET_ID
+            employees = Employee.objects.filter(is_active=True).order_by('sheet_name')
+            cards = []
             
-            if service is None:
-                logger.warning("Google Sheets service unavailable. Returning mock cards.")
-                return JsonResponse([
-                    {"sheet_name": "JULIAN 2025", "card_label": "JULIAN", "leader": "JULIAN", "cupo_mensual": "1.000.000", "valor_gastos": "200.000", "disponible": 800000},
-                    {"sheet_name": "MAURO 2025", "card_label": "MAURO", "leader": "MAURO", "cupo_mensual": "1.500.000", "valor_gastos": "500.000", "disponible": 1000000},
-                ], safe=False)
-
-            cards = get_cards_list(service, sheet_id)
+            today = datetime.date.today()
+            current_month = today.month
+            current_year = today.year
             
-            # Additional metrics for each card (M8, N8)
-            from core.services.google_sheets import read_data
-            for card in cards:
-                try:
-                    # Read M8 (Cupo) and N8 (Gastos)
-                    # We assume sheet_navigator correctly returns sheet_name
-                    metrics = read_data(service, sheet_id, card["sheet_name"], "M8:N8")
-                    if metrics and metrics[0]:
-                        card["cupo_mensual"] = metrics[0][0]
-                        card["valor_gastos"] = metrics[0][1] if len(metrics[0]) > 1 else "0"
-                        # Calculate available
-                        try:
-                            cupo = float(str(card["cupo_mensual"]).replace(",", ""))
-                            gastos = float(str(card["valor_gastos"]).replace(",", ""))
-                            card["disponible"] = cupo - gastos
-                        except:
-                            card["disponible"] = 0
-                except Exception as e:
-                    logger.error(f"Error reading metrics for card {card['sheet_name']}: {e}")
-                    card["cupo_mensual"] = 0
-                    card["valor_gastos"] = 0
-                    card["disponible"] = 0
+            for emp in employees:
+                gastos = Invoice.objects.filter(
+                    employee=emp,
+                    invoice_date__year=current_year,
+                    invoice_date__month=current_month
+                ).aggregate(total=Sum('value'))['total'] or 0
+                
+                cupo = emp.monthly_limit or 0
+                disponible = float(cupo) - float(gastos)
+                
+                cards.append({
+                    "sheet_name": emp.sheet_name,
+                    "card_label": emp.sheet_name.replace(f" {current_year}", "").strip(),
+                    "leader": emp.sheet_name.split()[0], # Leader estimation
+                    "cupo_mensual": "{:,.2f}".format(float(cupo)).replace(",", "X").replace(".", ",").replace("X", "."),
+                    "valor_gastos": "{:,.2f}".format(float(gastos)).replace(",", "X").replace(".", ",").replace("X", "."),
+                    "disponible": disponible
+                })
 
             return JsonResponse(cards, safe=False)
         except Exception as e:
@@ -355,17 +347,36 @@ class CardsListView(View):
 class CardMonthsView(View):
     def get(self, request, sheet_name):
         try:
-            service = get_sheets_service()
-            if service is None:
-                logger.warning(f"Google Sheets service unavailable. Returning mock months for {sheet_name}.")
-                return JsonResponse([
-                    {"month_label": "ENERO 2025", "start_row": 12, "end_row": 50},
-                    {"month_label": "FEBRERO 2025", "start_row": 51, "end_row": 100},
-                ], safe=False)
+            emp = Employee.objects.filter(sheet_name=sheet_name).first()
+            if not emp:
+                return JsonResponse([], safe=False)
+            
+            months_qs = Invoice.objects.filter(employee=emp, invoice_date__isnull=False).dates('invoice_date', 'month')
+            meses_espanol = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"]
+            
+            months_list = []
+            for date_obj in months_qs:
+                mes_str = f"{meses_espanol[date_obj.month - 1]} {date_obj.year}"
+                months_list.append({
+                    "month_label": mes_str,
+                    "month_num": date_obj.month,
+                    "year": date_obj.year,
+                    "start_row": 0,
+                    "end_row": 0
+                })
 
-            sheet_id = settings.SHEET_ID
-            months = get_months_in_sheet(service, sheet_id, sheet_name)
-            return JsonResponse(months, safe=False)
+            if not months_list:
+                # If no invoices exist, add current month as default
+                today = datetime.date.today()
+                months_list.append({
+                    "month_label": f"{meses_espanol[today.month - 1]} {today.year}",
+                    "month_num": today.month,
+                    "year": today.year,
+                    "start_row": 0,
+                    "end_row": 0
+                })
+                
+            return JsonResponse(months_list, safe=False)
         except Exception as e:
             logger.error(f"Error in CardMonthsView: {e}")
             return JsonResponse({"error": str(e)}, status=500)
@@ -373,22 +384,38 @@ class CardMonthsView(View):
 class ReportDataView(View):
     def get(self, request, sheet_name):
         try:
-            start_row = int(request.GET.get("start_row", 12))
-            end_row = int(request.GET.get("end_row", 100))
-            service = get_sheets_service()
-            if service is None:
-                logger.warning(f"Google Sheets service unavailable. Returning mock rows for {sheet_name}.")
-                return JsonResponse([
-                    {
-                        "no": 1, "fecha": "2025-01-05", "nombre_negocio": "Tienda Mock", "nit": "12345", 
-                        "num_factura": "FE-001", "centro_costos": "ADMIN", "concepto": "Papelería", 
-                        "valor_legalizado": "50000", "url_drive": "http://example.com", "cufe": "abc",
-                        "check_odoo_doc": "x", "check_odoo_pago": "x", "diferencia": "0", "observaciones": "Mock"
-                    }
-                ], safe=False)
+            month_num = request.GET.get("month")
+            year_num = request.GET.get("year")
+            
+            emp = Employee.objects.filter(sheet_name=sheet_name).first()
+            if not emp:
+                return JsonResponse([], safe=False)
+                
+            qs = Invoice.objects.filter(employee=emp)
+            if month_num and year_num:
+                qs = qs.filter(invoice_date__year=int(year_num), invoice_date__month=int(month_num))
+            
+            rows = []
+            for idx, inv in enumerate(qs.order_by('invoice_date')):
+                rows.append({
+                    "no": idx + 1,
+                    "fecha": inv.invoice_date.strftime("%Y-%m-%d") if inv.invoice_date else "",
+                    "nombre_negocio": inv.business_name,
+                    "nit": inv.nit,
+                    "num_factura": inv.invoice_number,
+                    "centro_costos": inv.cost_center,
+                    "concepto": inv.concept,
+                    "valor_legalizado": "{:,.2f}".format(float(inv.value or 0)).replace(",", "X").replace(".", ",").replace("X", "."),
+                    "url_drive": f"https://drive.google.com/drive/folders/{inv.drive_folder_id}" if inv.drive_folder_id else "",
+                    "cufe": inv.cufe,
+                    "check_odoo_doc": "VERDADERO" if inv.check_odoo_doc else "FALSO",
+                    "check_odoo_pago": "VERDADERO" if inv.check_odoo_pago else "FALSO",
+                    "diferencia": str(inv.difference or ""),
+                    "observaciones": inv.observations,
+                    "row_num": inv.id,
+                    "row_bg_color": {'red': 1, 'green': 1, 'blue': 1}
+                })
 
-            sheet_id = settings.SHEET_ID
-            rows = get_month_rows(service, sheet_id, sheet_name, start_row, end_row)
             return JsonResponse(rows, safe=False)
         except Exception as e:
             logger.error(f"Error in ReportDataView: {e}")

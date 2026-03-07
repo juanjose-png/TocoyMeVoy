@@ -93,6 +93,25 @@ def read_data(service_sheet, sheet_id: str, sheet_name: str, range_full: str):
     return adjusted_values
 
 
+def read_multiple_ranges(service_sheet, sheet_id: str, ranges: list) -> list:
+    """
+    Lee múltiples rangos de una o varias hojas de cálculo en una sola llamada a la API.
+    :param service_sheet: Objeto de servicio de Google Sheets.
+    :param sheet_id: ID de la hoja de cálculo.
+    :param ranges: Lista de rangos a leer en notación A1 (ej. ["Hoja1!A1:B2", "Hoja2!C3:D4"]).
+    :return: Lista de diccionarios valueRanges con la respuesta de la API.
+    """
+    if not ranges:
+        return []
+
+    try:
+        result = service_sheet.values().batchGet(spreadsheetId=sheet_id, ranges=ranges).execute()
+        return result.get("valueRanges", [])
+    except HttpError as err:
+        logger.error("Error al leer múltiples rangos: %s", err)
+        return []
+
+
 # Función para escribir datos en una hoja de cálculo dada
 def write_data(service_sheet, sheet_id: str, sheet_name: str, range_full: str,
                values: list, font_size: int = None, font_color = None):
@@ -973,10 +992,48 @@ def get_cell_background_color(service_sheet, sheet_id: str, sheet_name: str, cel
         .get("rowData", [{}])[0]
         .get("values", [{}])[0]
         .get("effectiveFormat", {})
-        .get("backgroundColor", None)
+        .get("backgroundColor")
         )
-        return color
 
+        # Retornamos el color
+        if color == {}:
+            return {'red': 1, 'green': 1, 'blue': 1}
+        else:
+            return color
     except Exception as e:
-        logger.error("Error al obtener el color de la celda: %s", e)
-        return None
+        logger.error(f"Error al obtener color de {sheet_name}!{cell}: {e}")
+        return {'red': 1, 'green': 1, 'blue': 1}
+
+def get_range_background_colors(service_sheet, sheet_id: str, sheet_name: str, cell_range: str) -> list:
+    """
+    Obtiene los colores de fondo de un rango 1D vertical en Google Sheets en una sola petición.
+    Retorna una lista donde cada elemento es el diccinario RGB de color correspondiente a esa fila.
+    """
+    try:
+        result = service_sheet.get(
+            spreadsheetId=sheet_id,
+            ranges=[f"{sheet_name}!{cell_range}"],
+            fields="sheets.data.rowData.values.effectiveFormat.backgroundColor"
+        ).execute()
+
+        row_data = (
+            result.get("sheets", [{}])[0]
+            .get("data", [{}])[0]
+            .get("rowData", [])
+        )
+        
+        colors = []
+        for row in row_data:
+            values = row.get("values", [])
+            if values:
+                color = values[0].get("effectiveFormat", {}).get("backgroundColor")
+                if not color or color == {}:
+                    colors.append({'red': 1, 'green': 1, 'blue': 1})
+                else:
+                    colors.append(color)
+            else:
+                colors.append({'red': 1, 'green': 1, 'blue': 1})
+        return colors
+    except Exception as e:
+        logger.error(f"Error al obtener colores del rango {sheet_name}!{cell_range}: {e}")
+        return []

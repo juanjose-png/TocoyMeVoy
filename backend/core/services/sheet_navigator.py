@@ -1,6 +1,6 @@
 import logging
 import re
-from core.services.google_sheets import get_visible_sheets_names, read_data, get_cell_background_color
+from core.services.google_sheets import get_visible_sheets_names, read_multiple_ranges, read_data, get_cell_background_color, get_range_background_colors
 
 logger = logging.getLogger(__name__)
 
@@ -13,14 +13,21 @@ def get_cards_list(service_sheet, sheet_id: str) -> list[dict]:
       - 'leader'     : nombre del líder leído de la celda K8 o L8
     """
     sheets = get_visible_sheets_names(service_sheet, sheet_id)
+    if not sheets:
+        return []
+
+    ranges = [f"'{sheet_name}'!K8:L8" for sheet_name in sheets]
+    value_ranges = read_multiple_ranges(service_sheet, sheet_id, ranges)
+
     cards = []
-    for sheet_name in sheets:
-        # Leer celdas K8:L8 para obtener el número de celular y/o nombre de líder
-        meta = read_data(service_sheet, sheet_id, sheet_name, "K8:L8")
+    for i, sheet_name in enumerate(sheets):
         leader = ""
-        if meta and meta[0]:
-            # La celda puede tener el nombre del líder en L8 y celular en K8
-            leader = meta[0][1] if len(meta[0]) > 1 else meta[0][0]
+        if i < len(value_ranges):
+            vr = value_ranges[i]
+            values = vr.get("values", [])
+            if values and values[0]:
+                meta = values[0]
+                leader = meta[1] if len(meta) > 1 else meta[0]
 
         # card_label: extraer solo la parte del nombre sin año
         label_match = re.match(r"^(.*?)(?:\s+\d{4})?$", sheet_name)
@@ -53,11 +60,14 @@ def get_months_in_sheet(service_sheet, sheet_id: str, sheet_name: str,
 
     months = []
     label_col_idx = 6 if is_special else 5  # G=6, F=5 (0-based)
+    
+    end_row_data = 11 + len(data)
+    colors = get_range_background_colors(service_sheet, sheet_id, sheet_name, f"A12:A{end_row_data}")
 
     for i, row in enumerate(data):
         row_num = i + 12
         # Leer color de la columna A para detectar separadores
-        color = get_cell_background_color(service_sheet, sheet_id, sheet_name, f"A{row_num}")
+        color = colors[i] if i < len(colors) else {'red': 1, 'green': 1, 'blue': 1}
         if color and color.get("red", 0) == 1 and color.get("green", 0) == 0:
             # Esta es una fila separadora de mes
             label = row[label_col_idx].strip() if len(row) > label_col_idx else ""
@@ -99,6 +109,8 @@ def get_month_rows(service_sheet, sheet_id: str, sheet_name: str,
     if not data:
         return []
 
+    colors = get_range_background_colors(service_sheet, sheet_id, sheet_name, f"A{start_row}:A{end_row}")
+
     rows = []
     for i, raw in enumerate(data):
         row_num = start_row + i
@@ -131,7 +143,7 @@ def get_month_rows(service_sheet, sheet_id: str, sheet_name: str,
             continue
 
         # Obtener color de la fila para respetar verde/amarillo en la UI
-        color = get_cell_background_color(service_sheet, sheet_id, sheet_name, f"A{row_num}")
+        color = colors[i] if i < len(colors) else {'red': 1, 'green': 1, 'blue': 1}
         row["row_bg_color"] = color  # dict con red/green/blue 0-1
         rows.append(row)
 

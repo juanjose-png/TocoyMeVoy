@@ -6,6 +6,7 @@ from django.utils import timezone
 class Employee(models.Model):
     cellphone = models.CharField(max_length=10, unique=True, verbose_name="Celular")  # 10 dígitos, sin prefijo 57
     sheet_name = models.CharField(max_length=100, unique=True, verbose_name="Hoja de cálculo")
+    monthly_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0, verbose_name="Cupo Mensual")
     is_active = models.BooleanField(default=True, verbose_name="Activo")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
     updated_at = models.DateTimeField(auto_now=True, verbose_name="Última actualización")
@@ -67,6 +68,13 @@ class Invoice(models.Model):
         max_length=200, blank=True, default="",
         verbose_name="ID carpeta Drive",
     )
+    
+    # Traceability
+    cufe = models.CharField(max_length=255, blank=True, default="", verbose_name="CUFE")
+    check_odoo_doc = models.BooleanField(default=False, verbose_name="Check Odoo Doc")
+    check_odoo_pago = models.BooleanField(default=False, verbose_name="Check Odoo Pago")
+    difference = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, verbose_name="Diferencia")
+    observations = models.TextField(blank=True, default="", verbose_name="Observaciones")
 
     status     = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, verbose_name="Estado")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="Fecha de creación")
