@@ -334,8 +334,8 @@ class CardsListView(View):
                     "sheet_name": emp.sheet_name,
                     "card_label": emp.sheet_name.replace(f" {current_year}", "").strip(),
                     "leader": emp.sheet_name.split()[0], # Leader estimation
-                    "cupo_mensual": "{:,.2f}".format(float(cupo)).replace(",", "X").replace(".", ",").replace("X", "."),
-                    "valor_gastos": "{:,.2f}".format(float(gastos)).replace(",", "X").replace(".", ",").replace("X", "."),
+                    "cupo_mensual": float(cupo),
+                    "valor_gastos": float(gastos),
                     "disponible": disponible
                 })
 
@@ -405,7 +405,7 @@ class ReportDataView(View):
                     "num_factura": inv.invoice_number,
                     "centro_costos": inv.cost_center,
                     "concepto": inv.concept,
-                    "valor_legalizado": "{:,.2f}".format(float(inv.value or 0)).replace(",", "X").replace(".", ",").replace("X", "."),
+                    "valor_legalizado": float(inv.value or 0),
                     "url_drive": f"https://drive.google.com/drive/folders/{inv.drive_folder_id}" if inv.drive_folder_id else "",
                     "cufe": inv.cufe,
                     "check_odoo_doc": "VERDADERO" if inv.check_odoo_doc else "FALSO",
@@ -419,4 +419,52 @@ class ReportDataView(View):
             return JsonResponse(rows, safe=False)
         except Exception as e:
             logger.error(f"Error in ReportDataView: {e}")
+            return JsonResponse({"error": str(e)}, status=500)
+
+
+@method_decorator(csrf_exempt, name="dispatch")
+class SyncOdooMonthView(View):
+    def post(self, request, sheet_name):
+        try:
+            data = json.loads(request.body)
+            month_num = data.get("month")
+            year_num = data.get("year")
+
+            if not month_num or not year_num:
+                return JsonResponse({"error": "Missing month or year"}, status=400)
+
+            emp = Employee.objects.filter(sheet_name=sheet_name).first()
+            if not emp:
+                return JsonResponse({"error": "Employee not found"}, status=404)
+
+            qs = Invoice.objects.filter(
+                employee=emp,
+                invoice_date__year=int(year_num),
+                invoice_date__month=int(month_num)
+            )
+
+            count = qs.count()
+            if count == 0:
+                return JsonResponse({"message": "No invoices found for this month"}, status=200)
+
+            from core.tasks import sync_invoice_payment_to_odoo
+
+            # Trigger Celery task for each invoice found
+            queued = 0
+            for inv in qs:
+                # We skip invoices that are already marked as paid to avoid unnecessary syncs
+                if not inv.check_odoo_pago:
+                    sync_invoice_payment_to_odoo.delay(inv.pk)
+                    queued += 1
+
+            return JsonResponse({
+                "message": f"Sync started for {queued} out of {count} invoices",
+                "total": count,
+                "queued": queued
+            }, status=200)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON"}, status=400)
+        except Exception as e:
+            logger.error(f"Error in SyncOdooMonthView: {e}")
             return JsonResponse({"error": str(e)}, status=500)

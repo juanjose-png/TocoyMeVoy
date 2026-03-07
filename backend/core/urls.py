@@ -10,4 +10,5 @@ urlpatterns = [
     path("api/cards/", views.CardsListView.as_view(), name="cards-list"),
     path("api/cards/<str:sheet_name>/months/", views.CardMonthsView.as_view(), name="card-months"),
     path("api/cards/<str:sheet_name>/report/", views.ReportDataView.as_view(), name="report-data"),
+    path("api/cards/<str:sheet_name>/sync-odoo/", views.SyncOdooMonthView.as_view(), name="sync-odoo"),
 ]

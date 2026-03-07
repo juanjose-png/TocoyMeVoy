@@ -15,6 +15,10 @@ env = environ.Env(
     TOKEN=(str, ""),
     PHONE_NUMBER_ID=(str, ""),
     CSRF_TRUSTED_ORIGINS=(list, []),
+    ODOO_URL=(str, ""),
+    ODOO_DB=(str, ""),
+    ODOO_USER=(str, ""),
+    ODOO_API_KEY=(str, ""),
 )
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -78,8 +82,12 @@ WSGI_APPLICATION = "solenium_project.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": env("DB_NAME", default="cajamenor"),
+        "USER": env("DB_USER", default="postgres"),
+        "PASSWORD": env("DB_PASSWORD", default="postgres"),
+        "HOST": env("DB_HOST", default="postgres"),
+        "PORT": env("DB_PORT", default="5432"),
     }
 }
 
@@ -134,6 +142,12 @@ MANTAINER_CELLPHONE = env("MANTAINER_CELLPHONE")
 VERIFY_TOKEN = env("VERIFY_TOKEN")
 TOKEN = env("TOKEN")
 PHONE_NUMBER_ID = env("PHONE_NUMBER_ID")
+
+# Odoo variables
+ODOO_URL = env("ODOO_URL")
+ODOO_DB = env("ODOO_DB")
+ODOO_USER = env("ODOO_USER")
+ODOO_API_KEY = env("ODOO_API_KEY")
 
 # ---------------------------------------------------------------------------
 # Logging

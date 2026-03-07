@@ -1,0 +1,15 @@
+{% load i18n %}
+
+<h3>{% blocktrans with filter_title=title %} By {{ filter_title }} {% endblocktrans %}</h3>
+<ul>
+    <li>
+        <form method="GET">
+            <input
+            type="date"
+            id="next-download-from-date"
+            name="next_download__from_date"
+            />
+            <button type="submit" class="btn btn-info">Buscar</button>
+        </form>
+    </li>
+</ul>

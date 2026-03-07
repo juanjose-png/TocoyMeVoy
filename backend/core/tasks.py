@@ -330,8 +330,18 @@ def sync_invoice_payment_to_odoo(invoice_pk):
                 status_doc = "✅ Causada"
                 # Intentar registro de pago si no está pagada
                 if odoo_invoice['payment_state'] in ['not_paid', 'partial']:
-                    journal_name = invoice.employee.sheet_name.split(' ')[0] # Usar primer nombre como Diario
-                    result = client.register_payment(odoo_invoice['id'], journal_name, odoo_invoice['invoice_date'])
+                    # Requerimiento: Diario = Nombre de la persona, Fecha = Fecha factura, Valor = Valor factura
+                    # Usamos el nombre del empleado completo como diario principal
+                    journal_name = invoice.employee.sheet_name
+                    payment_date = odoo_invoice['invoice_date']
+                    amount = invoice.value
+                    
+                    result = client.register_payment(
+                        odoo_invoice['id'], 
+                        journal_name, 
+                        payment_date,
+                        amount
+                    )
                     if result['success']:
                         status_pago = "✅ Pagada"
                     else:

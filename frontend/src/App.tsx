@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Layout } from "./components/Layout";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,8 @@ interface CardData {
 
 interface MonthData {
   month_label: string;
+  month_num: number;
+  year: number;
   start_row: number;
   end_row: number;
 }
@@ -75,6 +77,8 @@ export function App() {
 
   const handleCardClick = (card: CardData) => {
     setSelectedCard(card);
+    setMonths([]);
+    setScreen("months");
     setLoading(true);
     fetch(`${API_BASE}/cards/${card.sheet_name}/months/`)
       .then(res => res.json())
@@ -82,7 +86,6 @@ export function App() {
         if (Array.isArray(data)) {
           setMonths(data);
         }
-        setScreen("months");
         setLoading(false);
       })
       .catch(err => {
@@ -93,6 +96,8 @@ export function App() {
 
   const handleMonthClick = (month: MonthData) => {
     setSelectedMonth(month);
+    setReportRows([]);
+    setScreen("detail");
     setLoading(true);
     fetch(`${API_BASE}/cards/${selectedCard?.sheet_name}/report/?start_row=${month.start_row}&end_row=${month.end_row}`)
       .then(res => res.json())
@@ -100,7 +105,6 @@ export function App() {
         if (Array.isArray(data)) {
           setReportRows(data);
         }
-        setScreen("detail");
         setLoading(false);
       })
       .catch(err => {
@@ -125,15 +129,90 @@ export function App() {
   }, [reportRows, filterStartDate, filterEndDate, filterHasDoc, filterProveedor, filterNit, filterRef]);
 
   const formatCurrency = (val: any) => {
+    if (!val && val !== 0) return "$0";
     const num = parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
-    return isNaN(num) ? "$0" : `$${num.toLocaleString()}`;
+    return isNaN(num) ? "$0" : `$${num.toLocaleString("es-CO")}`;
+  };
+
+  const handleExport = () => {
+    if (!filteredData.length) return;
+
+    // Create CSV content
+    const headers = ["No", "Fecha", "Proveedor", "NIT/Cédula", "Ref. Factura", "C. Costos", "Legalizado", "Descripción", "Pago Odoo", "Comentarios Admin", "CUFE", "URL Drive", "Doc Odoo"];
+
+    // Helper to escape CSV fields
+    const escapeCsv = (val: string | number | boolean | null | undefined) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const csvRows = filteredData.map(item => [
+      escapeCsv(item.no),
+      escapeCsv(item.fecha),
+      escapeCsv(item.nombre_negocio),
+      escapeCsv(item.nit),
+      escapeCsv(item.num_factura),
+      escapeCsv(item.centro_costos),
+      escapeCsv(item.valor_legalizado),
+      escapeCsv(item.concepto),
+      escapeCsv(item.check_odoo_pago),
+      escapeCsv(item.observaciones),
+      escapeCsv(item.cufe),
+      escapeCsv(item.url_drive),
+      escapeCsv(item.check_odoo_doc)
+    ].join(","));
+
+    const csvString = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob(["\uFEFF" + csvString], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Reporte_${selectedCard?.card_label}_${selectedMonth?.month_label}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleSyncOdoo = async () => {
+    if (!selectedCard || !selectedMonth) return;
+
+    if (!confirm(`¿Estás seguro de sincronizar con Odoo las facturas de ${selectedMonth.month_label}?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/cards/${selectedCard.sheet_name}/sync-odoo/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          month: selectedMonth.month_num,
+          year: selectedMonth.year
+        })
+      });
+
+      const data = await response.json();
+      if (response.ok) {
+        alert(`Sincronización iniciada: ${data.message}`);
+      } else {
+        alert(`Error al sincronizar: ${data.error || 'Error desconocido'}`);
+      }
+    } catch (error) {
+      console.error("Error triggering Odoo sync:", error);
+      alert("Error de conexión al intentar sincronizar con Odoo.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (screen === "months" && selectedCard) {
     return (
       <Layout breadcrumb={`Solenium > Finanzas > Gestión de tarjetas > ${selectedCard.card_label}`}>
         <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
-          <Button variant="ghost" className="mb-2 -ml-2 text-muted-foreground hover:text-primary transition-colors font-extrabold" onClick={() => setScreen("cards")}>
+          <Button variant="ghost" className="mb-2 -ml-2 text-muted-foreground hover:text-primary transition-colors font-extrabold" onClick={() => { setScreen("cards"); setSelectedCard(null); setSelectedMonth(null); }}>
             ← Volver a tarjetas
           </Button>
           <div className="flex items-center justify-between">
@@ -142,12 +221,12 @@ export function App() {
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {months.map((m, idx) => (
-              <Card key={idx} className="group relative cursor-pointer border-none shadow-lg hover:shadow-2xl transition-all duration-500 rounded-[1.5rem] overflow-hidden" onClick={() => handleMonthClick(m)}>
+              <Card key={idx} className="group relative cursor-pointer border border-border/40 shadow-xl hover:shadow-2xl transition-all duration-500 rounded-[1.5rem] overflow-hidden bg-card" onClick={() => handleMonthClick(m)}>
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-solenium-blue/10 group-hover:from-primary group-hover:to-solenium-blue transition-all duration-500 opacity-50 group-hover:opacity-100" />
                 <CardHeader className="relative p-6">
                   <CardTitle className="flex justify-between items-center text-lg text-foreground group-hover:text-white font-extrabold uppercase transition-colors">
                     <span>{m.month_label}</span>
-                    <Badge variant="secondary" className="font-extrabold group-hover:bg-white group-hover:text-primary">Ver Reporte</Badge>
+                    <Badge variant="secondary" className="font-extrabold group-hover:bg-white group-hover:text-primary border-transparent">Ver Reporte</Badge>
                   </CardTitle>
                 </CardHeader>
               </Card>
@@ -165,7 +244,7 @@ export function App() {
           <div className="flex flex-col gap-4">
             <div className="flex items-center justify-between">
               <div className="space-y-1">
-                <Button variant="ghost" className="mb-1 -ml-2 text-muted-foreground hover:text-primary transition-colors font-extrabold" onClick={() => setScreen("months")}>
+                <Button variant="ghost" className="mb-1 -ml-2 text-muted-foreground hover:text-primary transition-colors font-extrabold" onClick={() => { setScreen("months"); setSelectedMonth(null); }}>
                   ← Volver a meses
                 </Button>
                 <div className="flex items-center gap-3">
@@ -177,7 +256,8 @@ export function App() {
                 <Button variant="outline" className="text-xs font-extrabold hover:bg-muted" onClick={() => {
                   setFilterStartDate(""); setFilterEndDate(""); setFilterHasDoc("all"); setFilterProveedor(""); setFilterNit(""); setFilterRef("");
                 }}>Restaurar Filtros</Button>
-                <Button variant="default" className="text-xs font-extrabold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all">Exportar Reporte</Button>
+                <Button variant="secondary" className="text-xs font-extrabold shadow-lg shadow-secondary/20 hover:scale-105 active:scale-95 transition-all bg-green-600 hover:bg-green-700 text-white" onClick={handleSyncOdoo} disabled={loading}>Sincronizar Odoo</Button>
+                <Button variant="default" className="text-xs font-extrabold shadow-lg shadow-primary/20 hover:scale-105 active:scale-95 transition-all" onClick={handleExport}>Exportar Reporte</Button>
               </div>
             </div>
 
@@ -255,35 +335,35 @@ export function App() {
 
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {cards.map((card, idx) => (
-            <Card key={idx} className="group relative overflow-hidden min-h-[16rem] border-none shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer rounded-[2rem]" onClick={() => handleCardClick(card)}>
+            <Card key={idx} className="group relative overflow-hidden min-h-[16rem] border border-border/40 bg-card shadow-xl hover:shadow-2xl hover:border-primary/30 transition-all duration-500 cursor-pointer rounded-[2rem]" onClick={() => handleCardClick(card)}>
               <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-solenium-blue/20 group-hover:from-primary group-hover:to-solenium-blue transition-all duration-500 opacity-50 group-hover:opacity-100" />
-              <CardContent className="relative h-full flex flex-col p-8">
+              <CardContent className="relative h-full flex flex-col p-8 z-10">
                 <div className="flex justify-between items-start mb-4">
-                  <div className="text-4xl group-hover:scale-110 transition-transform">💳</div>
-                  <Badge className="bg-white/20 text-foreground group-hover:bg-white group-hover:text-primary transition-colors font-extrabold uppercase">ACTIVA</Badge>
+                  <div className="text-4xl group-hover:scale-110 transition-transform drop-shadow-sm">💳</div>
+                  <Badge className="bg-primary/10 text-primary border-primary/20 group-hover:bg-white group-hover:text-primary group-hover:border-transparent transition-colors font-extrabold uppercase">ACTIVA</Badge>
                 </div>
 
                 <div className="space-y-1 mb-6">
-                  <CardTitle className="text-2xl font-extrabold uppercase tracking-[0.1em] group-hover:text-white transition-colors">
+                  <CardTitle className="text-2xl font-extrabold uppercase tracking-[0.1em] text-foreground group-hover:text-white transition-colors">
                     {card.card_label}
                   </CardTitle>
-                  <p className="text-[10px] font-mono font-extrabold opacity-40 group-hover:text-white/80 transition-colors uppercase tracking-widest leading-tight">Líder: {card.leader}</p>
+                  <p className="text-[10px] font-mono font-extrabold text-foreground/50 group-hover:text-white/80 transition-colors uppercase tracking-widest leading-tight">Líder: {card.leader}</p>
                 </div>
 
                 <div className="space-y-4 mt-auto">
-                  <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-widest group-hover:text-white/80 transition-colors">
-                    <span>Cupo Mensual</span>
-                    <span className="group-hover:text-white">{formatCurrency(card.cupo_mensual)}</span>
+                  <div className="flex justify-between items-baseline mb-2">
+                    <span className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-foreground/50 group-hover:text-white/70 transition-colors">Cupo Mensual</span>
+                    <span className="text-primary group-hover:text-white text-lg font-bold tracking-tight transition-colors">{formatCurrency(card.cupo_mensual)}</span>
                   </div>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-[10px] font-extrabold uppercase tracking-widest group-hover:text-white transition-colors">
-                      <span>Disponible</span>
-                      <span>{formatCurrency(card.disponible)}</span>
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-baseline">
+                      <span className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-foreground/50 group-hover:text-white/70 transition-colors">Disponible</span>
+                      <span className="text-lg font-bold tracking-tight text-foreground group-hover:text-white transition-colors">{formatCurrency(card.disponible)}</span>
                     </div>
-                    <div className="h-1.5 w-full bg-black/5 group-hover:bg-white/20 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-secondary group-hover:bg-white/20 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-primary group-hover:bg-white transition-all duration-1000"
-                        style={{ width: `${Math.min(100, (card.disponible / (parseFloat(String(card.cupo_mensual).replace(/[^0-9.-]+/g, "")) || 1)) * 100)}%` }}
+                        style={{ width: `${Math.max(0, Math.min(100, (card.disponible / (parseFloat(String(card.cupo_mensual).replace(/[^0-9.-]+/g, "")) || 1)) * 100))}%` }}
                       />
                     </div>
                   </div>

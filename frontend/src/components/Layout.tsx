@@ -1,5 +1,4 @@
 import React from "react";
-import { cn } from "@/lib/utils";
 
 interface LayoutProps {
     children: React.ReactNode;
@@ -10,24 +9,20 @@ export function Layout({ children, breadcrumb = "Solenium > Finanzas > Gestión 
     return (
         <div className="flex h-screen bg-background overflow-hidden">
             {/* Sidebar */}
-            <aside className="w-64 bg-sidebar text-sidebar-foreground border-r border-sidebar-border hidden md:flex flex-col">
-                <div className="p-6">
-                    <h2 className="text-xl font-bold tracking-tight text-sidebar-primary">Solenium</h2>
+            <aside className="w-64 text-sidebar-foreground border-r border-sidebar-border hidden md:flex flex-col" style={{ background: 'linear-gradient(135deg, #3BB339 0%, #1D99CC 100%)' }}>
+                <div className="p-6 flex items-center justify-center">
+                    <h2 className="text-2xl font-bold tracking-widest text-white drop-shadow-sm text-center uppercase whitespace-nowrap">Solenium SAS</h2>
                 </div>
                 <nav className="flex-1 px-4 space-y-2">
-                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider opacity-50">
+                    <div className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-white/50">
                         Administración
                     </div>
-                    <a href="#" className="flex items-center gap-3 px-3 py-2 rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
-                        <span className="w-2 h-2 rounded-full bg-sidebar-primary" />
+                    <a href="#" className="flex items-center gap-3 px-3 py-2 rounded-md bg-white/20 text-white font-medium">
+                        <span className="w-2 h-2 rounded-full bg-white" />
                         Tarjetas
                     </a>
-                    <a href="#" className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-sidebar-accent transition-colors">
-                        <span className="w-2 h-2 rounded-full border border-sidebar-foreground/30" />
-                        Empleados
-                    </a>
                 </nav>
-                <div className="p-4 border-t border-sidebar-border text-xs opacity-50">
+                <div className="p-4 border-t border-white/20 text-xs text-white/50 font-medium">
                     v1.0.0-solenium
                 </div>
             </aside>
