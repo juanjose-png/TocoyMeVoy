@@ -52,7 +52,7 @@ class OdooClient:
             logger.info(f"Buscando factura en Odoo con ref: {ref_clean}")
             results = self.models.execute_kw(self.db, self.uid, self.password,
                 'account.move', 'search_read', [domain],
-                {'fields': ['id', 'name', 'state', 'payment_state', 'invoice_date', 'amount_total']})
+                {'fields': ['id', 'name', 'ref', 'state', 'payment_state', 'invoice_date', 'amount_total']})
             
             if results:
                 # Filtrar por coincidencia exacta si hay varios, o tomar el primero
@@ -62,7 +62,7 @@ class OdooClient:
             logger.warning(f"No se encontró factura en Odoo con ref: {ref_clean}")
             return None
         except Exception as e:
-            logger.error(f"Error searching invoice {reference}: {e}")
+            logger.error(f"Error searching invoice {reference}: {e}", exc_info=True)
             return None
 
     def register_payment(self, invoice_id, journal_name, payment_date, amount):
@@ -78,27 +78,32 @@ class OdooClient:
             # 1. Buscar Journal por nombre
             journal_domain = [('name', 'ilike', journal_name), ('type', 'in', ['bank', 'cash'])]
             journals = self.models.execute_kw(self.db, self.uid, self.password,
-                'account.journal', 'search_read', [journal_domain], {'fields': ['id', 'name']})
+                'account.journal', 'search_read', [journal_domain], {'fields': ['id', 'name', 'outbound_payment_method_line_ids']})
             
             if not journals:
                 logger.warning(f"Journal '{journal_name}' no encontrado. Intentando con nombre parcial...")
                 # Reintento con búsqueda más amplia si falla
                 journal_domain = [('name', 'ilike', journal_name.split(' ')[0])]
                 journals = self.models.execute_kw(self.db, self.uid, self.password,
-                    'account.journal', 'search_read', [journal_domain], {'fields': ['id', 'name']})
+                    'account.journal', 'search_read', [journal_domain], {'fields': ['id', 'name', 'outbound_payment_method_line_ids']})
 
             if not journals:
                 return {'success': False, 'error': f"Journal '{journal_name}' no encontrado en Odoo."}
             
             journal_id = journals[0]['id']
-            logger.info(f"Journal encontrado: {journals[0]['name']} (ID: {journal_id})")
+            # Obtener el método de pago (Manual suele ser el primero)
+            payment_method_line_id = False
+            if journals[0].get('outbound_payment_method_line_ids'):
+                payment_method_line_id = journals[0]['outbound_payment_method_line_ids'][0]
+
+            logger.info(f"Journal encontrado: {journals[0]['name']} (ID: {journal_id}), Método: {payment_method_line_id}")
 
             # 2. Preparar el wizard de registro de pago
             wizard_vals = {
                 'journal_id': journal_id,
                 'payment_date': payment_date,
                 'amount': float(amount),
-                'payment_method_line_id': False, # Odoo suele determinarlo solo, pero se puede especificar
+                'payment_method_line_id': payment_method_line_id,
             }
             
             # En Odoo 14+ se usa account.payment.register

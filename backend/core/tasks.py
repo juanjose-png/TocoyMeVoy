@@ -316,9 +316,11 @@ def sync_invoice_payment_to_odoo(invoice_pk):
         client = OdooClient()
         
         # 1. Buscar factura
+        logger.info(f"Iniciando sincronización Odoo para factura {invoice.invoice_number} (ID: {invoice_pk})")
         odoo_invoice = client.get_invoice_by_ref(invoice.invoice_number)
         
         if not odoo_invoice:
+            logger.warning(f"Factura {invoice.invoice_number} no encontrada en Odoo para sincronización.")
             status_doc = "❌ No encontrada"
             status_pago = "❌"
         else:
@@ -326,8 +328,10 @@ def sync_invoice_payment_to_odoo(invoice_pk):
             if state == 'draft':
                 status_doc = "⏳ Borrador (Odoo)"
                 status_pago = "⏳ Pendiente"
+                invoice.check_odoo_doc = False
             elif state == 'posted':
                 status_doc = "✅ Causada"
+                invoice.check_odoo_doc = True
                 # Intentar registro de pago si no está pagada
                 if odoo_invoice['payment_state'] in ['not_paid', 'partial']:
                     # Requerimiento: Diario = Nombre de la persona, Fecha = Fecha factura, Valor = Valor factura
@@ -343,14 +347,24 @@ def sync_invoice_payment_to_odoo(invoice_pk):
                         amount
                     )
                     if result['success']:
+                        logger.info(f"Pago registrado exitosamente en Odoo para factura {invoice.invoice_number}. ID Pago: {result.get('payment_id')}")
                         status_pago = "✅ Pagada"
+                        invoice.check_odoo_pago = True
                     else:
+                        logger.error(f"Fallo al registrar pago en Odoo para factura {invoice.invoice_number}: {result['error']}")
                         status_pago = f"❌ Error: {result['error']}"
+                        invoice.check_odoo_pago = False
                 else:
                     status_pago = "✅ Pagada anteriormente"
+                    invoice.check_odoo_pago = True
             else:
                 status_doc = f"❓ Estado: {state}"
                 status_pago = "❓"
+                invoice.check_odoo_doc = False
+                invoice.check_odoo_pago = False
+        
+        # Guardar cambios en DB local
+        invoice.save()
 
         # 2. Actualizar Google Sheets
         service = _sheets_service or get_sheets_service()
